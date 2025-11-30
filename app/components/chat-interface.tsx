@@ -1,0 +1,267 @@
+"use client";
+import React, { useState, useRef, useEffect } from "react";
+import { Sparkles, Copy, Check, Loader2 } from "lucide-react";
+
+interface Message {
+    role: "user" | "assistant";
+    content: string;
+}
+
+interface ConversationItem {
+    question: string;
+    answer: string;
+}
+
+interface ChatInterfaceProps {
+    initialPrompt: string;
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt }) => {
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [conversationHistory, setConversationHistory] = useState<ConversationItem[]>([]);
+    const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
+    const [finalPrompt, setFinalPrompt] = useState<string>("");
+    const [copied, setCopied] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [currentQuestion, setCurrentQuestion] = useState("");
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const MAX_QUESTIONS = 5;
+
+    useEffect(() => {
+        // Start the conversation by asking the first question
+        askFirstQuestion();
+    }, [initialPrompt]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    const askFirstQuestion = async () => {
+        setLoading(true);
+        try {
+            const response = await fetch("/api/ask-question", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userInput: initialPrompt,
+                    conversationHistory: [],
+                    questionNumber: 1,
+                }),
+            });
+
+            const data = await response.json();
+            const question = data.question;
+            setCurrentQuestion(question);
+
+            setMessages([
+                {
+                    role: "assistant",
+                    content: `Great! I'll help you craft the perfect prompt for: "${initialPrompt}"\n\nLet me ask you a few questions to optimize it.\n\n${question}`,
+                },
+            ]);
+        } catch (error) {
+            console.error("Error asking question:", error);
+            setMessages([
+                {
+                    role: "assistant",
+                    content: "Sorry, there was an error. Please try again.",
+                },
+            ]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAnswer = async (answer: string) => {
+        // Add user message
+        const newMessages = [...messages, { role: "user" as const, content: answer }];
+        setMessages(newMessages);
+
+        // Update conversation history
+        const newHistory = [
+            ...conversationHistory,
+            { question: currentQuestion, answer },
+        ];
+        setConversationHistory(newHistory);
+
+        if (currentQuestionNumber < MAX_QUESTIONS) {
+            // Ask next question
+            setLoading(true);
+            try {
+                const response = await fetch("/api/ask-question", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userInput: initialPrompt,
+                        conversationHistory: newHistory,
+                        questionNumber: currentQuestionNumber + 1,
+                    }),
+                });
+
+                const data = await response.json();
+                const question = data.question;
+                setCurrentQuestion(question);
+
+                setMessages([...newMessages, { role: "assistant", content: question }]);
+                setCurrentQuestionNumber(currentQuestionNumber + 1);
+            } catch (error) {
+                console.error("Error asking question:", error);
+                setMessages([
+                    ...newMessages,
+                    {
+                        role: "assistant",
+                        content: "Sorry, there was an error. Please try again.",
+                    },
+                ]);
+            } finally {
+                setLoading(false);
+            }
+        } else {
+            // Generate final prompt
+            setLoading(true);
+            try {
+                const response = await fetch("/api/generate-prompt", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userInput: initialPrompt,
+                        conversationHistory: newHistory,
+                    }),
+                });
+
+                const data = await response.json();
+                const generatedPrompt = data.prompt;
+                setFinalPrompt(generatedPrompt);
+
+                setMessages([
+                    ...newMessages,
+                    {
+                        role: "assistant",
+                        content: `Perfect! Based on your answers, here's your optimized prompt:\n\n---\n\n${generatedPrompt}\n\n---\n\nThis prompt is now ready to use with any AI model!`,
+                    },
+                ]);
+            } catch (error) {
+                console.error("Error generating prompt:", error);
+                setMessages([
+                    ...newMessages,
+                    {
+                        role: "assistant",
+                        content: "Sorry, there was an error generating the prompt. Please try again.",
+                    },
+                ]);
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(finalPrompt);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div className="w-full max-w-4xl mx-auto bg-white rounded-lg border border-gray-200 shadow-sm p-8 min-h-[600px] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+                <Sparkles className="w-5 h-5 text-black" />
+                <h2 className="text-xl font-semibold text-gray-900">AI Prompt Engineer</h2>
+                <div className="ml-auto text-sm text-gray-500 font-mono">
+                    {Math.min(currentQuestionNumber, MAX_QUESTIONS)} / {MAX_QUESTIONS}
+                </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto mb-6 space-y-4">
+                {messages.map((msg, idx) => (
+                    <div
+                        key={idx}
+                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                        <div
+                            className={`max-w-[80%] p-4 rounded-lg text-sm ${msg.role === "user"
+                                ? "bg-black text-white"
+                                : "bg-white border border-gray-200 text-gray-900"
+                                }`}
+                        >
+                            <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                            {msg.role === "assistant" && finalPrompt && idx === messages.length - 1 && (
+                                <button
+                                    onClick={copyToClipboard}
+                                    className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-900 rounded-md hover:bg-gray-50 transition-colors text-xs font-medium"
+                                >
+                                    {copied ? (
+                                        <>
+                                            <Check className="w-4 h-4 text-green-600" />
+                                            <span className="text-green-600">Copied!</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="w-4 h-4" />
+                                            <span>Copy Prompt</span>
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                ))}
+
+                {loading && (
+                    <div className="flex justify-start">
+                        <div className="bg-white border border-gray-200 text-gray-500 p-4 rounded-lg flex items-center gap-2 text-sm">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Thinking...</span>
+                        </div>
+                    </div>
+                )}
+
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Area - Only show if not finished and not loading */}
+            {!finalPrompt && !loading && (
+                <QuickAnswerInput onSubmit={handleAnswer} />
+            )}
+        </div>
+    );
+};
+
+interface QuickAnswerInputProps {
+    onSubmit: (answer: string) => void;
+}
+
+const QuickAnswerInput: React.FC<QuickAnswerInputProps> = ({ onSubmit }) => {
+    const [input, setInput] = useState("");
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (input.trim()) {
+            onSubmit(input);
+            setInput("");
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="relative">
+            <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Type your answer..."
+                className="w-full px-4 py-3 pr-24 border border-gray-200 rounded-lg focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all text-gray-900 placeholder-gray-500 text-sm"
+                autoFocus
+            />
+            <button
+                type="submit"
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-black text-white rounded-md hover:bg-gray-800 transition-all font-medium text-sm"
+            >
+                Send
+            </button>
+        </form>
+    );
+};
+
+export default ChatInterface;
