@@ -3,9 +3,9 @@ import { generatePrompt } from "@/app/lib/gemini";
 
 export async function POST(req: NextRequest) {
     try {
-        const { userInput, conversationHistory } = await req.json();
+        const { userInput, conversationHistory, model } = await req.json();
 
-        const optimizedPrompt = await generatePrompt(userInput, conversationHistory);
+        const optimizedPrompt = await generatePrompt(userInput, conversationHistory, model);
 
         return NextResponse.json({ prompt: optimizedPrompt });
     } catch (error) {

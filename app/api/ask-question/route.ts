@@ -3,9 +3,9 @@ import { askQuestion } from "@/app/lib/gemini";
 
 export async function POST(req: NextRequest) {
     try {
-        const { userInput, conversationHistory, questionNumber } = await req.json();
+        const { userInput, conversationHistory, questionNumber, model } = await req.json();
 
-        const question = await askQuestion(userInput, conversationHistory, questionNumber);
+        const question = await askQuestion(userInput, conversationHistory, questionNumber, model);
 
         return NextResponse.json({ question });
     } catch (error) {

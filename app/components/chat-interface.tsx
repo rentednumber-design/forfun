@@ -14,9 +14,10 @@ interface ConversationItem {
 
 interface ChatInterfaceProps {
     initialPrompt: string;
+    model: string;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [conversationHistory, setConversationHistory] = useState<ConversationItem[]>([]);
     const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
@@ -26,7 +27,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt }) => {
     const [currentQuestion, setCurrentQuestion] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const MAX_QUESTIONS = 5;
+
+
+    const generateFinalPrompt = async (history: ConversationItem[], currentMsgs: Message[]) => {
+        setLoading(true);
+        try {
+            const response = await fetch("/api/generate-prompt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userInput: initialPrompt,
+                    conversationHistory: history,
+                    model: model,
+                }),
+            });
+
+            const data = await response.json();
+            const generatedPrompt = data.prompt;
+            setFinalPrompt(generatedPrompt);
+
+            setMessages([
+                ...currentMsgs,
+                {
+                    role: "assistant",
+                    content: `Perfect! Based on your answers, here's your optimized prompt:\n\n---\n\n${generatedPrompt}\n\n---\n\nThis prompt is now ready to use with any AI model!`,
+                },
+            ]);
+        } catch (error) {
+            console.error("Error generating prompt:", error);
+            setMessages([
+                ...currentMsgs,
+                {
+                    role: "assistant",
+                    content: "Sorry, there was an error generating the prompt. Please try again.",
+                },
+            ]);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
         // Start the conversation by asking the first question
@@ -47,19 +86,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt }) => {
                     userInput: initialPrompt,
                     conversationHistory: [],
                     questionNumber: 1,
+                    model: model,
                 }),
             });
 
             const data = await response.json();
             const question = data.question;
-            setCurrentQuestion(question);
 
-            setMessages([
-                {
-                    role: "assistant",
-                    content: `Great! I'll help you craft the perfect prompt for: "${initialPrompt}"\n\nLet me ask you a few questions to optimize it.\n\n${question}`,
-                },
-            ]);
+            if (question === "[READY]") {
+                generateFinalPrompt([], []);
+            } else {
+                setCurrentQuestion(question);
+                setMessages([
+                    {
+                        role: "assistant",
+                        content: `Great! I'll help you craft the perfect prompt for: "${initialPrompt}"\n\nLet me ask you a few questions to optimize it.\n\n${question}`,
+                    },
+                ]);
+            }
         } catch (error) {
             console.error("Error asking question:", error);
             setMessages([
@@ -85,74 +129,40 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt }) => {
         ];
         setConversationHistory(newHistory);
 
-        if (currentQuestionNumber < MAX_QUESTIONS) {
-            // Ask next question
-            setLoading(true);
-            try {
-                const response = await fetch("/api/ask-question", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        userInput: initialPrompt,
-                        conversationHistory: newHistory,
-                        questionNumber: currentQuestionNumber + 1,
-                    }),
-                });
+        setLoading(true);
+        try {
+            const response = await fetch("/api/ask-question", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userInput: initialPrompt,
+                    conversationHistory: newHistory,
+                    questionNumber: currentQuestionNumber + 1,
+                    model: model,
+                }),
+            });
 
-                const data = await response.json();
-                const question = data.question;
-                setCurrentQuestion(question);
+            const data = await response.json();
+            const questionOrReady = data.question;
 
-                setMessages([...newMessages, { role: "assistant", content: question }]);
+            if (questionOrReady === "[READY]") {
+                generateFinalPrompt(newHistory, newMessages);
+            } else {
+                setCurrentQuestion(questionOrReady);
+                setMessages([...newMessages, { role: "assistant", content: questionOrReady }]);
                 setCurrentQuestionNumber(currentQuestionNumber + 1);
-            } catch (error) {
-                console.error("Error asking question:", error);
-                setMessages([
-                    ...newMessages,
-                    {
-                        role: "assistant",
-                        content: "Sorry, there was an error. Please try again.",
-                    },
-                ]);
-            } finally {
-                setLoading(false);
             }
-        } else {
-            // Generate final prompt
-            setLoading(true);
-            try {
-                const response = await fetch("/api/generate-prompt", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        userInput: initialPrompt,
-                        conversationHistory: newHistory,
-                    }),
-                });
-
-                const data = await response.json();
-                const generatedPrompt = data.prompt;
-                setFinalPrompt(generatedPrompt);
-
-                setMessages([
-                    ...newMessages,
-                    {
-                        role: "assistant",
-                        content: `Perfect! Based on your answers, here's your optimized prompt:\n\n---\n\n${generatedPrompt}\n\n---\n\nThis prompt is now ready to use with any AI model!`,
-                    },
-                ]);
-            } catch (error) {
-                console.error("Error generating prompt:", error);
-                setMessages([
-                    ...newMessages,
-                    {
-                        role: "assistant",
-                        content: "Sorry, there was an error generating the prompt. Please try again.",
-                    },
-                ]);
-            } finally {
-                setLoading(false);
-            }
+        } catch (error) {
+            console.error("Error asking question:", error);
+            setMessages([
+                ...newMessages,
+                {
+                    role: "assistant",
+                    content: "Sorry, there was an error. Please try again.",
+                },
+            ]);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -169,7 +179,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt }) => {
                 <Sparkles className="w-5 h-5 text-black" />
                 <h2 className="text-xl font-semibold text-gray-900">AI Prompt Engineer</h2>
                 <div className="ml-auto text-sm text-gray-500 font-mono">
-                    {Math.min(currentQuestionNumber, MAX_QUESTIONS)} / {MAX_QUESTIONS}
+                    Question {currentQuestionNumber}
                 </div>
             </div>
 

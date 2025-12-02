@@ -5,10 +5,12 @@ import ChatInterface from "./components/chat-interface";
 
 export default function Home() {
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>("gemini-2.5-flash-lite");
   const [showChat, setShowChat] = useState(false);
 
-  const handleInitialSubmit = (prompt: string) => {
+  const handleInitialSubmit = (prompt: string, model: string) => {
     setInitialPrompt(prompt);
+    setSelectedModel(model);
     setShowChat(true);
   };
 
@@ -39,7 +41,7 @@ export default function Home() {
           >
             ← Start Over
           </button>
-          {initialPrompt && <ChatInterface initialPrompt={initialPrompt} />}
+          {initialPrompt && <ChatInterface initialPrompt={initialPrompt} model={selectedModel} />}
         </div>
       )}
     </main>
