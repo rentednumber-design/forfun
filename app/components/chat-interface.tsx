@@ -24,6 +24,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
     const [finalPrompt, setFinalPrompt] = useState<string>("");
     const [copied, setCopied] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [loadingText, setLoadingText] = useState("Thinking...");
     const [currentQuestion, setCurrentQuestion] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -31,6 +32,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
 
     const generateFinalPrompt = async (history: ConversationItem[], currentMsgs: Message[]) => {
         setLoading(true);
+        setLoadingText("Generating final prompt...");
         try {
             const response = await fetch("/api/generate-prompt", {
                 method: "POST",
@@ -78,6 +80,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
 
     const askFirstQuestion = async () => {
         setLoading(true);
+        setLoadingText("Thinking...");
         try {
             const response = await fetch("/api/ask-question", {
                 method: "POST",
@@ -94,7 +97,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
             const question = data.question;
 
             if (question === "[READY]") {
-                generateFinalPrompt([], []);
+                await generateFinalPrompt([], []);
             } else {
                 setCurrentQuestion(question);
                 setMessages([
@@ -130,6 +133,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
         setConversationHistory(newHistory);
 
         setLoading(true);
+        setLoadingText("Thinking...");
         try {
             const response = await fetch("/api/ask-question", {
                 method: "POST",
@@ -146,7 +150,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
             const questionOrReady = data.question;
 
             if (questionOrReady === "[READY]") {
-                generateFinalPrompt(newHistory, newMessages);
+                await generateFinalPrompt(newHistory, newMessages);
             } else {
                 setCurrentQuestion(questionOrReady);
                 setMessages([...newMessages, { role: "assistant", content: questionOrReady }]);
@@ -173,11 +177,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto bg-white rounded-lg border border-gray-200 shadow-sm p-8 min-h-[600px] flex flex-col">
+        <div className="w-full max-w-4xl mx-auto bg-[#0f1115] rounded-2xl border border-white/5 shadow-lg p-8 min-h-[600px] flex flex-col">
             {/* Header */}
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-                <Sparkles className="w-5 h-5 text-black" />
-                <h2 className="text-xl font-semibold text-gray-900">AI Prompt Engineer</h2>
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
+                <Sparkles className="w-5 h-5 text-blue-400" />
+                <h2 className="text-xl font-semibold text-white">AI Prompt Engineer</h2>
                 <div className="ml-auto text-sm text-gray-500 font-mono">
                     Question {currentQuestionNumber}
                 </div>
@@ -192,20 +196,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
                     >
                         <div
                             className={`max-w-[80%] p-4 rounded-lg text-sm ${msg.role === "user"
-                                ? "bg-black text-white"
-                                : "bg-white border border-gray-200 text-gray-900"
+                                ? "bg-[#1a1d26] text-white border border-white/5"
+                                : "bg-transparent border border-white/10 text-gray-200"
                                 }`}
                         >
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                             {msg.role === "assistant" && finalPrompt && idx === messages.length - 1 && (
                                 <button
                                     onClick={copyToClipboard}
-                                    className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-900 rounded-md hover:bg-gray-50 transition-colors text-xs font-medium"
+                                    className="mt-4 flex items-center gap-2 px-3 py-1.5 bg-[#1a1d26] border border-white/10 text-gray-300 rounded-md hover:bg-[#252833] transition-colors text-xs font-medium"
                                 >
                                     {copied ? (
                                         <>
-                                            <Check className="w-4 h-4 text-green-600" />
-                                            <span className="text-green-600">Copied!</span>
+                                            <Check className="w-4 h-4 text-green-400" />
+                                            <span className="text-green-400">Copied!</span>
                                         </>
                                     ) : (
                                         <>
@@ -221,9 +225,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model }) =
 
                 {loading && (
                     <div className="flex justify-start">
-                        <div className="bg-white border border-gray-200 text-gray-500 p-4 rounded-lg flex items-center gap-2 text-sm">
+                        <div className="bg-[#1a1d26] border border-white/5 text-gray-400 p-4 rounded-lg flex items-center gap-2 text-sm">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Thinking...</span>
+                            <span>{loadingText}</span>
                         </div>
                     </div>
                 )}
@@ -261,12 +265,12 @@ const QuickAnswerInput: React.FC<QuickAnswerInputProps> = ({ onSubmit }) => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type your answer..."
-                className="w-full px-4 py-3 pr-24 border border-gray-200 rounded-lg focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all text-gray-900 placeholder-gray-500 text-sm"
+                className="w-full px-4 py-3 pr-24 bg-[#1a1d26] border border-white/10 rounded-lg focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all text-white placeholder-gray-500 text-sm"
                 autoFocus
             />
             <button
                 type="submit"
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-black text-white rounded-md hover:bg-gray-800 transition-all font-medium text-sm"
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-white text-black rounded-md hover:bg-gray-200 transition-all font-medium text-sm"
             >
                 Send
             </button>

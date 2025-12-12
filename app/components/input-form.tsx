@@ -1,90 +1,112 @@
 "use client";
 import { ArrowUp, ChevronDown } from "lucide-react";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 interface MessageInputProps {
     onSend: (message: string, model: string) => void;
     placeholder?: string;
 }
 
+const models = [
+    { id: "gemini-2.5-flash-lite", name: "Fast" },
+    { id: "gemini-2.5-flash", name: "Medium" },
+    { id: "gemini-2.5-pro", name: "Expert" },
+];
+
 const MessageInput: React.FC<MessageInputProps> = ({
     onSend,
-    placeholder = "Describe your prompt... We'll make it happen!"
+    placeholder = "Message AI Chat..."
 }) => {
     const [message, setMessage] = useState("");
-    const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash-lite");
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [selectedModel, setSelectedModel] = useState(models[0]);
+    const [isModelOpen, setIsModelOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const models = [
-        { label: "Basic", value: "gemini-2.5-flash-lite", description: "Faster and cheaper. Good for simple tasks." },
-        { label: "Medium", value: "gemini-2.5-flash", description: "Average. Good for most tasks." },
-        { label: "Expert", value: "gemini-2.5-pro", description: "Best. Good for complex tasks." },
-    ];
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsModelOpen(false);
+            }
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (message.trim()) {
-            onSend(message, selectedModel);
+            onSend(message, selectedModel.id);
             setMessage("");
         }
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit(e as any);
+        }
+    };
+
     return (
-        <div className="w-full flex justify-center mt-10">
-            {/* Smaller centered container */}
-            <div className="w-full max-w-2xl">
+        <div className="w-full flex justify-center">
+            <div className="w-full max-w-3xl">
                 <form
                     onSubmit={handleSubmit}
-                    className="relative bg-white rounded-lg p-4 border border-gray-200 shadow-sm transition-shadow focus-within:shadow-md"
+                    className="relative bg-[#0f1115] rounded-2xl p-4 border border-white/5 shadow-lg"
                 >
                     <textarea
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
+                        onKeyDown={handleKeyDown}
                         placeholder={placeholder}
-                        className="w-full h-28 resize-none bg-transparent outline-none text-gray-900 placeholder-gray-500 text-sm mb-8"
+                        className="w-full h-14 resize-none bg-transparent outline-none text-gray-200 placeholder-gray-500 text-base mb-2"
                     />
 
-                    {/* Model Dropdown */}
-                    <div className="absolute bottom-4 left-4">
-                        <div className="relative">
+                    <div className="flex justify-between items-center">
+                        <div className="relative" ref={dropdownRef}>
                             <button
                                 type="button"
-                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md text-xs font-medium text-gray-700 transition-colors"
+                                onClick={() => setIsModelOpen(!isModelOpen)}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#1a1d26] hover:bg-[#252833] transition-colors text-sm text-gray-300"
                             >
-                                <span>{models.find(m => m.value === selectedModel)?.label}</span>
-                                <ChevronDown className="w-3 h-3 text-gray-500" />
+                                <span>{selectedModel.name}</span>
+                                <ChevronDown className={`w-4 h-4 transition-transform ${isModelOpen ? "rotate-180" : ""}`} />
                             </button>
 
-                            {isDropdownOpen && (
-                                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
+                            {isModelOpen && (
+                                <div className="absolute bottom-full left-0 mb-2 w-48 bg-[#1a1d26] border border-white/10 rounded-xl shadow-xl overflow-hidden z-10">
                                     {models.map((model) => (
                                         <button
-                                            key={model.value}
+                                            key={model.id}
                                             type="button"
                                             onClick={() => {
-                                                setSelectedModel(model.value);
-                                                setIsDropdownOpen(false);
+                                                setSelectedModel(model);
+                                                setIsModelOpen(false);
                                             }}
-                                            className={`w-full text-left px-4 py-2 text-xs hover:bg-gray-50 transition-colors flex flex-col gap-0.5 ${selectedModel === model.value ? "bg-gray-50" : ""
+                                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-[#252833] ${selectedModel.id === model.id ? "text-blue-400 bg-[#252833]/50" : "text-gray-300"
                                                 }`}
                                         >
-                                            <span className="font-medium text-gray-900">{model.label}</span>
-                                            <span className="text-gray-500 text-[10px]">{model.value}</span>
+                                            {model.name}
                                         </button>
                                     ))}
                                 </div>
                             )}
                         </div>
-                    </div>
 
-                    {/* Send Button */}
-                    <button
-                        type="submit"
-                        className="absolute bottom-4 right-4 bg-black hover:bg-gray-800 text-white w-8 h-8 rounded-md flex items-center justify-center transition-colors"
-                    >
-                        <ArrowUp className="w-4 h-4" />
-                    </button>
+                        <button
+                            type="submit"
+                            disabled={!message.trim()}
+                            className={`p-2 rounded-full transition-colors ${message.trim()
+                                ? "bg-white text-black hover:bg-gray-200"
+                                : "bg-[#1a1d26] text-gray-500 cursor-not-allowed"
+                                }`}
+                        >
+                            <ArrowUp className="w-5 h-5" />
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
