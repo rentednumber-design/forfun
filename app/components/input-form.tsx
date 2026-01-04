@@ -1,116 +1,220 @@
 "use client";
-import { ArrowUp, ChevronDown } from "lucide-react";
+import { ArrowUp, ChevronDown, Check, Plus, X } from "lucide-react";
 import React, { useState, useRef, useEffect } from "react";
 
 interface MessageInputProps {
-    onSend: (message: string, model: string) => void;
-    placeholder?: string;
+  // Include optional image base64 string
+  onSend: (message: string, model: string, image?: string) => void;
+  placeholder?: string;
 }
 
 const models = [
-    { id: "gemini-2.5-flash-lite", name: "Fast" },
-    { id: "gemini-2.5-flash", name: "Medium" },
-    { id: "gemini-2.5-pro", name: "Expert" },
+  {
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
+    description: "Most capable for complex work",
+    isPremium: true,
+  },
+  {
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    description: "Best for everyday tasks",
+    isPremium: false,
+  },
+  {
+    id: "gemini-2.5-flash-lite",
+    name: "Gemini 2.5 Flash-Lite",
+    description: "Fastest for quick answers",
+    isPremium: false,
+  },
 ];
 
 const MessageInput: React.FC<MessageInputProps> = ({
-    onSend,
-    placeholder = "Message AI Chat..."
+  onSend,
+  placeholder = "How can I help you today?",
 }) => {
-    const [message, setMessage] = useState("");
-    const [selectedModel, setSelectedModel] = useState(models[0]);
-    const [isModelOpen, setIsModelOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
+  const [message, setMessage] = useState("");
+  const [selectedModel, setSelectedModel] = useState(models[1]); // default to Flash
+  const [isModelOpen, setIsModelOpen] = useState(false);
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsModelOpen(false);
-            }
-        };
+  // Image states
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, []);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (message.trim()) {
-            onSend(message, selectedModel.id);
-            setMessage("");
-        }
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsModelOpen(false);
+      }
     };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSubmit(e as any);
-        }
-    };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-    return (
-        <div className="w-full flex justify-center">
-            <div className="w-full max-w-3xl">
-                <form
-                    onSubmit={handleSubmit}
-                    className="relative bg-surface-1 rounded-2xl p-4 border border-white/10 shadow-xl focus-within:border-primary transition-all"
-                >
-                    <textarea
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder={placeholder}
-                        className="w-full h-14 resize-none bg-transparent outline-none text-foreground placeholder-muted-foreground text-base mb-2"
-                    />
+  const removeImage = () => {
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
-                    <div className="flex justify-between items-center">
-                        <div className="relative" ref={dropdownRef}>
-                            <button
-                                type="button"
-                                onClick={() => setIsModelOpen(!isModelOpen)}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 transition-colors text-sm text-muted-foreground border border-white/5"
-                            >
-                                <span>{selectedModel.name}</span>
-                                <ChevronDown className={`w-4 h-4 transition-transform ${isModelOpen ? "rotate-180" : ""}`} />
-                            </button>
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (message.trim() || imagePreview) {
+      onSend(message, selectedModel.id, imagePreview || undefined);
+      setMessage("");
+      setImagePreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
-                            {isModelOpen && (
-                                <div className="absolute bottom-full left-0 mb-2 w-48 bg-surface-1 border border-white/10 rounded-xl shadow-xl overflow-hidden z-10">
-                                    {models.map((model) => (
-                                        <button
-                                            key={model.id}
-                                            type="button"
-                                            onClick={() => {
-                                                setSelectedModel(model);
-                                                setIsModelOpen(false);
-                                            }}
-                                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-surface-2 ${selectedModel.id === model.id ? "text-primary bg-surface-2/50" : "text-muted-foreground"
-                                                }`}
-                                        >
-                                            {model.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={!message.trim()}
-                            className={`p-2 rounded-full transition-all ${message.trim()
-                                ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
-                                : "bg-surface-2 text-muted-foreground/50 cursor-not-allowed"
-                                }`}
-                        >
-                            <ArrowUp className="w-5 h-5" />
-                        </button>
-                    </div>
-                </form>
+  return (
+    <div className="w-full flex justify-center">
+      <div className="w-full max-w-3xl">
+        <form
+          onSubmit={handleSubmit}
+          className="relative bg-surface-1 rounded-2xl p-4 border border-border shadow-sm focus-within:ring-1 focus-within:ring-primary/20 transition-all"
+        >
+          {/* Image Preview Area */}
+          {imagePreview && (
+            <div className="relative inline-block mb-4 group">
+              <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-border">
+                <img
+                  src={imagePreview}
+                  alt="Upload preview"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={removeImage}
+                className="absolute -top-2 -right-2 bg-foreground text-background rounded-full p-1 shadow-md hover:scale-110 transition-transform"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </div>
-        </div>
-    );
+          )}
+
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder={placeholder}
+            className="w-full h-14 resize-none bg-transparent outline-none text-foreground placeholder-muted-foreground/60 text-lg mb-2"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
+          />
+
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              {/* Hidden File Input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+              {/* Plus Button to trigger upload */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 rounded-lg text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsModelOpen(!isModelOpen)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-surface-2 transition-colors text-sm text-muted-foreground"
+                >
+                  <span>{selectedModel.name.split(" ").pop()}</span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 opacity-50 transition-transform ${
+                      isModelOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {isModelOpen && (
+                  <div className="absolute bottom-full right-0 mb-2 w-72 bg-surface-1 border border-border rounded-2xl shadow-2xl overflow-hidden z-50 p-1">
+                    {models.map((model) => (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedModel(model);
+                          setIsModelOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-xl transition-colors flex flex-col relative group ${
+                          selectedModel.id === model.id ? "bg-surface-2/50" : "hover:bg-surface-2"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full mb-0.5">
+                          <span
+                            className={`font-medium ${
+                              selectedModel.id === model.id
+                                ? "text-foreground"
+                                : "text-muted-foreground group-hover:text-foreground"
+                            }`}
+                          >
+                            {model.name}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {model.isPremium && (
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-blue-200 text-blue-600 bg-blue-50">
+                                Upgrade
+                              </span>
+                            )}
+                            {selectedModel.id === model.id && (
+                              <Check className="w-4 h-4 text-blue-500" strokeWidth={3} />
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground/70 leading-tight">
+                          {model.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={!message.trim() && !imagePreview}
+                className={`p-2 rounded-lg transition-all ${
+                  message.trim() || imagePreview
+                    ? "bg-primary text-primary-foreground shadow-sm hover:opacity-90"
+                    : "bg-primary/20 text-primary-foreground/40 cursor-not-allowed"
+                }`}
+              >
+                <ArrowUp className="w-5 h-5" strokeWidth={2.5} />
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export default MessageInput;

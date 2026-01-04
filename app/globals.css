@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ================================
-   THEME TOKENS (GROK-INSPIRED DARK UI)
+   THEME TOKENS (TAILWIND V4 STYLE)
 ================================ */
 @theme inline {
   --font-sans: var(--font-geist-sans);
@@ -12,8 +12,8 @@
 
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -33,61 +33,50 @@
 }
 
 /* ================================
-   ROOT (DARK BY DEFAULT - GROK STYLE)
+   ROOT VARIABLES (COLOR PALETTE)
 ================================ */
 :root {
-  --radius: 16px;
+  --radius: 20px;
 
-  /* Background layers - Pure black base with subtle elevated surfaces */
-  --background: #000000;
-  --surface-1: #0a0a0a;
-  --surface-2: #111111;
-  --surface-3: #1a1a1a;
+  /* Background - Warm Eggshell/Cream */
+  --background: #fbf9f4;
 
-  /* Text */
-  --foreground: #ffffff;
-  --muted-foreground: #a0a0a0;
+  /* Surfaces - Layered Beiges */
+  --surface-1: #ffffff;
+  /* Pure white for main input cards */
+  --surface-2: #f5f2eb;
+  /* Soft beige for secondary elements */
+  --surface-3: #eeebe3;
+  /* Darker beige for hover states */
 
-  /* Brand / Accent - Vibrant blue-green inspired by modern Grok/xAI aesthetic */
-  --primary: #00ff9d;
-  /* Bright cyan-green for highlights and Grok messages */
-  --primary-foreground: #000000;
+  /* Typography - High contrast charcoal */
+  --foreground: #2d2d2d;
+  --muted-foreground: #706f6c;
 
-  /* UI elements */
-  --card: var(--surface-2);
-  --popover: var(--surface-3);
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.06);
-  --ring: rgba(0, 255, 157, 0.4);
+  /* Brand / Accent - Muted Coral from your logo */
+  --primary: #e68a6e;
+  --primary-foreground: #ffffff;
 
-  /* States */
-  --muted: rgba(255, 255, 255, 0.03);
-  --accent: rgba(255, 255, 255, 0.05);
-  --destructive: #ff4444;
-  --success: #00c851;
+  /* UI Elements */
+  --border: rgba(0, 0, 0, 0.08);
+  --input: #ffffff;
+  --ring: rgba(230, 138, 110, 0.2);
+  --muted: #f1ede4;
+  --accent: #f8f6f0;
 
-  /* Sidebar (if used) */
-  --sidebar: #080808;
-  --sidebar-foreground: #ffffff;
-  --sidebar-accent: #111111;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  /* Feedback States */
+  --destructive: #dc2626;
+  --success: #16a34a;
+
+  /* Sidebar (If used) */
+  --sidebar: #f5f2eb;
+  --sidebar-foreground: #2d2d2d;
+  --sidebar-border: rgba(0, 0, 0, 0.05);
 }
 
 /* ================================
-   BODY / APP BACKGROUND
-================================ */
-body {
-  min-height: 100vh;
-  color: var(--foreground);
-  background:
-    radial-gradient(circle at top,
-      #0f0f1a 0%,
-      #000000 70%);
-}
-
-/* ================================
-   BASE LAYER
-================================ */
+   BASE STYLES
+=============================== */
 @layer base {
   * {
     border-color: var(--border);
@@ -96,56 +85,60 @@ body {
 
   body {
     @apply antialiased;
+    background-color: var(--background);
+    color: var(--foreground);
+    min-height: 100vh;
   }
 }
 
 /* ================================
-   CHAT-SPECIFIC UTILITIES
+   COMPONENT UTILITIES (EDITABLE HERE)
 ================================ */
+@layer components {
 
-/* Cards / panels */
-.chat-surface {
-  background: var(--surface-2);
-  border-radius: var(--radius-lg);
-  box-shadow:
-    0 10px 40px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* The Serif Heading ("Monday Session...") */
+  .greeting-text {
+    color: var(--foreground);
+    font-family: serif;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  /* The "Free Plan" Pill */
+  .badge {
+    background-color: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+
+  /* Chat Box Surface */
+  .chat-surface {
+    background-color: var(--surface-1);
+    border: 1px solid var(--border);
+    box-shadow:
+      0 10px 30px -10px rgba(0, 0, 0, 0.04),
+      0 4px 6px -2px rgba(0, 0, 0, 0.02);
+  }
+
+  /* Custom Resizable Handle color */
+  [data-panel-group-direction="horizontal"]>[data-panel-resize-handle] {
+    background-color: var(--border) !important;
+    width: 1px !important;
+    transition: background-color 0.2s;
+  }
+
+  [data-panel-group-direction="horizontal"]>[data-panel-resize-handle]:hover {
+    background-color: var(--primary) !important;
+  }
 }
 
-/* Message bubbles - Modern asymmetric style with stronger contrast */
-.message-in {
-  background: var(--surface-3);
-  color: var(--foreground);
-  border-radius: 16px 16px 16px 4px;
-  max-width: 80%;
-}
-
-.message-out {
-  background: linear-gradient(135deg,
-      #00ff9d,
-      #00c88a);
-  color: #000000;
-  border-radius: 16px 16px 4px 16px;
-  max-width: 80%;
-}
-
-/* Inputs */
-.chat-input {
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--foreground);
-}
-
-/* Hover states */
-.hover-soft:hover {
-  background: rgba(255, 255, 255, 0.06);
-  transition: background 0.2s ease;
-}
-
-/* Scrollbars - Subtle and modern */
+/* ================================
+   SCROLLBARS
+================================ */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -153,10 +146,36 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ================================
+   SYNTAX HIGHLIGHTING (FOR JSON)
+================================ */
+.syntax-key {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.syntax-string {
+  color: var(--primary);
+}
+
+.syntax-boolean {
+  color: var(--success);
+}
+
+.syntax-number {
+  color: #b45309;
+}
+
+/* Amber-700 */
+.syntax-muted {
+  color: var(--muted-foreground);
+  opacity: 0.6;
 }

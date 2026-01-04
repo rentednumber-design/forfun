@@ -3,37 +3,37 @@ import { promptEngine } from "@/app/lib/gemini";
 
 export async function POST(req: NextRequest) {
     try {
-        const { userInput, conversationHistory, model } = await req.json();
+        // Destructure 'image' from the incoming JSON body
+        const { userInput, conversationHistory, model, image } = await req.json();
 
-        if (!userInput) {
+        // Check for userInput OR image (since a user might upload an image without text)
+        if (!userInput && !image) {
             return NextResponse.json(
-                { error: "User input is required" },
+                { error: "Input or image is required" },
                 { status: 400 }
             );
         }
 
-        const output = await promptEngine(userInput, conversationHistory || [], model || "gemini-2.5-flash-lite");
+        // Pass the image to the promptEngine
+        const output = await promptEngine(
+            userInput || "Analyze this image",
+            conversationHistory || [],
+            model || "gemini-2.5-flash-lite",
+            image // The base64 data
+        );
 
         // CASE 1: Model returns JSON (Final Prompt)
-        // Check if it looks like JSON (starts with { or contains ```json)
         if (output.trim().startsWith("{") || output.includes("```json")) {
             try {
-                // Clean up the output - more robust regex to handle various markdown code block formats
                 let cleanedOutput = output.replace(/```(?:json)?\s*([\s\S]*?)\s*```/g, "$1").trim();
 
-                // Fallback: if regex didn't strip it (e.g. no code blocks but just text), just try parsing
-                // If it starts with {, it might be raw JSON
-                if (cleanedOutput.startsWith("{") && cleanedOutput.endsWith("}")) {
-                    // already clean
-                } else if (output.includes("{")) {
-                    // Try to extract JSON object if it's embedded in text
+                if (!(cleanedOutput.startsWith("{") && cleanedOutput.endsWith("}"))) {
                     const match = output.match(/\{[\s\S]*\}/);
                     if (match) {
                         cleanedOutput = match[0];
                     }
                 }
 
-                // Fix potential double quote issues (e.g. ""Style" -> "Style")
                 cleanedOutput = cleanedOutput.replace(/""([^"]+)":/g, '"$1":');
 
                 const promptJSON = JSON.parse(cleanedOutput);
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // CASE 2: Model is ready (No JSON provided, but signaled ready)
+        // CASE 2: Model is ready (Signal for manual triggers)
         if (output === "[READY]") {
             return NextResponse.json({
                 status: "ready",
@@ -58,14 +58,23 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // CASE 3: Model asks a clarification question
+        // CASE 3: Model asks a clarification question (or general text response)
         return NextResponse.json({
             status: "question",
             question: output
         });
 
-    } catch (error) {
-        console.error("Error in prompt engine:", error);
+    } catch (error: any) {
+        console.error("Error in prompt engine route:", error);
+
+        // Specific handling for the 429 Quota error you saw earlier
+        if (error.status === 429) {
+            return NextResponse.json(
+                { error: "API Quota exceeded. Please try again later." },
+                { status: 429 }
+            );
+        }
+
         return NextResponse.json(
             { error: "Failed to process request" },
             { status: 500 }

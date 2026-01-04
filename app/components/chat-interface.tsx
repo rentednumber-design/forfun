@@ -1,341 +1,319 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles, Copy, Check, Loader2, ArrowLeft } from "lucide-react";
+import { Sparkles, Copy, Check, Loader2, ArrowLeft, Plus, X } from "lucide-react";
 import {
-    ResizableHandle,
-    ResizablePanel,
-    ResizablePanelGroup,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
 } from "@/components/ui/resizable";
 
 interface Message {
-    role: "user" | "assistant";
-    content: string;
+  role: "user" | "assistant";
+  content: string;
+  image?: string; // Support for displaying images in chat
 }
 
 interface ConversationItem {
-    question: string;
-    answer: string;
+  question: string;
+  answer: string;
 }
 
 interface ChatInterfaceProps {
-    initialPrompt: string;
-    model: string;
-    onBack: () => void;
+  initialPrompt: string;
+  initialImage?: string; // image from Home
+  model: string;
+  onBack: () => void;
 }
 
+// Basic JSON syntax highlight
 function syntaxHighlight(json: string): string {
-    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return json.replace(
-        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-        (match) => {
-            let style = '';
-
-            if (/^"/.test(match)) {
-                if (/:$/.test(match)) {
-                    // JSON Keys – make them stand out softly but elegantly
-                    style = 'text-cyan-300';        // Soft cyan, close to your #00ff9d but calmer
-                } else {
-                    // String Values – warm green for great readability
-                    style = 'text-emerald-400';
-                }
-            } else if (/true|false/.test(match)) {
-                // Booleans – subtle blue
-                style = 'text-sky-400';
-            } else if (/null/.test(match)) {
-                // null – muted purple-gray
-                style = 'text-zinc-500';
-            } else {
-                // Numbers – vibrant but not overwhelming
-                style = 'text-amber-400';
-            }
-
-            return `<span class="${style}">${match}</span>`;
-        }
-    );
+  json = json.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return json.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    (match) => {
+      let style = "";
+      if (/^"/.test(match)) {
+        style = /:$/.test(match) ? "text-foreground font-semibold" : "text-primary";
+      } else if (/true|false/.test(match)) {
+        style = "text-success";
+      } else if (/null/.test(match)) {
+        style = "text-muted-foreground opacity-50";
+      } else {
+        style = "text-amber-700";
+      }
+      return `<span class="${style}">${match}</span>`;
+    }
+  );
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialPrompt, model, onBack }) => {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [conversationHistory, setConversationHistory] = useState<ConversationItem[]>([]);
-    const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
-    const [finalPrompt, setFinalPrompt] = useState<string>("");
-    const [copied, setCopied] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [loadingText, setLoadingText] = useState("Thinking...");
-    const [currentQuestion, setCurrentQuestion] = useState("");
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  initialPrompt,
+  initialImage,
+  model,
+  onBack,
+}) => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationHistory, setConversationHistory] = useState<ConversationItem[]>([]);
+  const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
+  const [finalPrompt, setFinalPrompt] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState("Thinking...");
+  const [currentQuestion, setCurrentQuestion] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Track if initial request has been made to prevent duplicates
-    const initialRequestMade = useRef(false);
-    // Track the current prompt to detect actual changes
-    const lastPromptRef = useRef<string>("");
+  const initialRequestMade = useRef(false);
+  const lastPromptRef = useRef<string>("");
 
-    // Memoize processPrompt to prevent unnecessary re-creations
-    const processPrompt = useCallback(async (history: ConversationItem[], currentMsgs: Message[]) => {
-        setLoading(true);
-        setLoadingText("Thinking...");
+  const processPrompt = useCallback(
+    async (history: ConversationItem[], currentMsgs: Message[], imageToSend?: string) => {
+      setLoading(true);
+      setLoadingText("Thinking...");
 
-        try {
-            const response = await fetch("/api/prompt", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    userInput: initialPrompt,
-                    conversationHistory: history,
-                    model: model,
-                }),
-            });
+      try {
+        const response = await fetch("/api/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userInput: initialPrompt,
+            conversationHistory: history,
+            model: model,
+            image: imageToSend, // send image to API
+          }),
+        });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
 
-            const data = await response.json();
-
-            if (data.status === "complete") {
-                const isRefinement = !!finalPrompt;
-                setFinalPrompt(JSON.stringify(data.prompt, null, 2));
-                setMessages([
-                    ...currentMsgs,
-                    {
-                        role: "assistant",
-                        content: isRefinement
-                            ? "I've updated the prompt based on your feedback. You can see the changes in the panel."
-                            : "Perfect! I've generated your optimized prompt. You can view it in the panel to the right.",
-                    },
-                ]);
-            } else if (data.status === "question") {
-                setCurrentQuestion(data.question);
-                setMessages([
-                    ...currentMsgs,
-                    {
-                        role: "assistant",
-                        content: data.question,
-                    },
-                ]);
-                if (history.length > 0 && !finalPrompt) {
-                    setCurrentQuestionNumber(prev => prev + 1);
-                }
-            } else if (data.error) {
-                throw new Error(data.error);
-            } else {
-                console.error("Unexpected status:", data.status);
-                setMessages([
-                    ...currentMsgs,
-                    {
-                        role: "assistant",
-                        content: "Something went wrong. Please try again.",
-                    },
-                ]);
-            }
-        } catch (error: any) {
-            console.error("Error processing prompt:", error);
-            const errorMessage = error.message?.includes("Rate limit")
-                ? "Rate limit exceeded. Please wait a moment before trying again."
-                : error.message?.includes("quota")
-                    ? "API quota exceeded. Please try again later."
-                    : "Sorry, there was an error. Please try again.";
-
-            setMessages([
-                ...currentMsgs,
-                {
-                    role: "assistant",
-                    content: errorMessage,
-                },
-            ]);
-        } finally {
-            setLoading(false);
+        if (data.status === "complete") {
+          const isRefinement = !!finalPrompt;
+          setFinalPrompt(JSON.stringify(data.prompt, null, 2));
+          setMessages([
+            ...currentMsgs,
+            {
+              role: "assistant",
+              content: isRefinement
+                ? "I've updated the prompt based on your feedback."
+                : "Perfect! I've generated your optimized prompt.",
+            },
+          ]);
+        } else if (data.status === "question") {
+          setCurrentQuestion(data.question);
+          setMessages([...currentMsgs, { role: "assistant", content: data.question }]);
+          if (history.length > 0 && !finalPrompt) setCurrentQuestionNumber((prev) => prev + 1);
         }
-    }, [initialPrompt, model, finalPrompt]);
+      } catch (error: any) {
+        setMessages([...currentMsgs, { role: "assistant", content: "Error: " + error.message }]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [initialPrompt, model, finalPrompt]
+  );
 
-    // Handle initial prompt and reset
-    useEffect(() => {
-        // Only run if the prompt actually changed
-        if (initialPrompt === lastPromptRef.current) {
-            return;
-        }
+  // Kick off the first request when the initial prompt or image changes
+  useEffect(() => {
+    if (initialPrompt === lastPromptRef.current) return;
+    setMessages([]);
+    setConversationHistory([]);
+    setCurrentQuestionNumber(1);
+    setFinalPrompt("");
+    initialRequestMade.current = false;
+    lastPromptRef.current = initialPrompt;
 
-        // Reset all state
-        setMessages([]);
-        setConversationHistory([]);
-        setCurrentQuestionNumber(1);
-        setFinalPrompt("");
-        setCurrentQuestion("");
-        initialRequestMade.current = false;
-        lastPromptRef.current = initialPrompt;
+    // Start chat even if only an image is provided
+    if (!initialRequestMade.current && (initialPrompt.trim() || initialImage)) {
+      initialRequestMade.current = true;
+      processPrompt([], [], initialImage);
+    }
+  }, [initialPrompt, initialImage, processPrompt]);
 
-        // Make initial API call
-        if (!initialRequestMade.current && initialPrompt.trim()) {
-            initialRequestMade.current = true;
-            processPrompt([], []);
-        }
-    }, [initialPrompt, processPrompt]);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-    // Auto-scroll to bottom
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+  const handleAnswer = async (answer: string, image?: string) => {
+    if (loading) return;
+    const newMessages = [...messages, { role: "user" as const, content: answer, image }];
+    setMessages(newMessages);
 
-    const handleAnswer = async (answer: string) => {
-        if (loading) return;
+    const lastQuestion = finalPrompt ? "Refinement request" : currentQuestion;
+    const newHistory = [...conversationHistory, { question: lastQuestion, answer }];
+    setConversationHistory(newHistory);
 
-        // Add user message
-        const newMessages = [...messages, { role: "user" as const, content: answer }];
-        setMessages(newMessages);
+    await processPrompt(newHistory, newMessages, image);
+  };
 
-        // Update conversation history
-        const lastQuestion = finalPrompt ? "Refinement request" : currentQuestion;
-        const newHistory = [
-            ...conversationHistory,
-            { question: lastQuestion, answer },
-        ];
-        setConversationHistory(newHistory);
+  return (
+    <div className="w-full h-full bg-background overflow-hidden flex flex-col">
+      <ResizablePanelGroup direction="horizontal">
+        <ResizablePanel defaultSize={finalPrompt ? 50 : 100} minSize={30}>
+          <div className="h-full flex flex-col p-8 bg-background">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+              <button
+                onClick={onBack}
+                className="p-2 -ml-2 hover:bg-surface-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <Sparkles className="w-5 h-5 text-primary" />
+              <h2 className="text-xl font-serif text-foreground">AI Prompt Engineer</h2>
+              {!finalPrompt && (
+                <div className="ml-auto text-xs text-muted-foreground uppercase tracking-widest font-medium">
+                  Step {currentQuestionNumber}
+                </div>
+              )}
+            </div>
 
-        await processPrompt(newHistory, newMessages);
-    };
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto mb-6 space-y-6 pr-4">
+              {messages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[85%] p-4 rounded-2xl text-base leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-foreground text-background"
+                        : "bg-surface-2 text-foreground border border-border"
+                    }`}
+                  >
+                    {msg.image && (
+                      <img
+                        src={msg.image}
+                        alt="User upload"
+                        className="max-w-full max-h-60 rounded-lg mb-3 object-contain bg-black/5"
+                      />
+                    )}
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  </div>
+                </div>
+              ))}
 
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(finalPrompt);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
+              {loading && (
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{loadingText}</span>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
 
-    return (
-        <div className="w-full h-full bg-background overflow-hidden flex flex-col">
-            <ResizablePanelGroup direction="horizontal">
-                <ResizablePanel defaultSize={finalPrompt ? 50 : 100} minSize={30}>
-                    <div className="h-full flex flex-col p-8">
-                        {/* Header */}
-                        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
-                            <button
-                                onClick={onBack}
-                                className="p-2 -ml-2 hover:bg-white/5 rounded-lg transition-colors text-muted-foreground hover:text-white"
-                                title="Go Back"
-                            >
-                                <ArrowLeft className="w-5 h-5" />
-                            </button>
-                            <Sparkles className="w-5 h-5 text-primary" />
-                            <h2 className="text-xl font-semibold text-white">AI Prompt Engineer</h2>
-                            {!finalPrompt && (
-                                <div className="ml-auto text-sm text-muted-foreground font-mono">
-                                    Question {currentQuestionNumber}
-                                </div>
-                            )}
-                        </div>
+            {/* Input */}
+            {!finalPrompt && (
+              <div className="mt-auto">
+                <QuickAnswerInput
+                  onSubmit={(ans, img) => handleAnswer(ans, img)}
+                  placeholder="Type your answer or upload an image…"
+                />
+              </div>
+            )}
+          </div>
+        </ResizablePanel>
 
-                        {/* Messages */}
-                        <div className="flex-1 overflow-y-auto mb-6 space-y-4 pr-4">
-                            {messages.map((msg, idx) => (
-                                <div
-                                    key={idx}
-                                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                                >
-                                    <div
-                                        className={`max-w-[80%] p-4 rounded-lg text-sm ${msg.role === "user"
-                                            ? "bg-surface-2 text-white border border-white/5"
-                                            : "bg-transparent border border-white/10 text-foreground"
-                                            }`}
-                                    >
-                                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                                    </div>
-                                </div>
-                            ))}
-
-                            {loading && (
-                                <div className="flex justify-start">
-                                    <div className="bg-surface-2 border border-white/5 text-muted-foreground p-4 rounded-lg flex items-center gap-2 text-sm">
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        <span>{loadingText}</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div ref={messagesEndRef} />
-                        </div>
-
-                        {/* Input Area */}
-                        {!loading && (
-                            <QuickAnswerInput
-                                onSubmit={handleAnswer}
-                                placeholder={finalPrompt ? "Refine your prompt (e.g., 'add more detail')..." : "Type your answer..."}
-                            />
-                        )}
-                    </div>
-                </ResizablePanel>
-
-                {finalPrompt && (
-                    <>
-                        <ResizableHandle withHandle />
-                        <ResizablePanel defaultSize={50} minSize={30}>
-                            <div className="h-full flex flex-col bg-surface-1/50 p-6 border-l border-white/5">
-                                <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
-                                    <h3 className="text-lg font-medium text-white">Optimized Prompt</h3>
-                                    <button
-                                        onClick={copyToClipboard}
-                                        className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 border border-white/10 text-muted-foreground rounded-md hover:bg-surface-3 transition-colors text-xs font-medium"
-                                    >
-                                        {copied ? (
-                                            <>
-                                                <Check className="w-4 h-4 text-success" />
-                                                <span className="text-success">Copied!</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Copy className="w-4 h-4" />
-                                                <span>Copy Prompt</span>
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                                <div className="flex-1 overflow-y-auto bg-background rounded-lg border border-white/10 p-4">
-                                    <pre
-                                        className="text-sm font-mono whitespace-pre-wrap p-4 overflow-x-auto"
-                                        dangerouslySetInnerHTML={{ __html: syntaxHighlight(finalPrompt) }}
-                                    />
-                                </div>
-                            </div>
-                        </ResizablePanel>
-                    </>
-                )}
-            </ResizablePanelGroup>
-        </div>
-    );
+        {finalPrompt && (
+          <>
+            <ResizableHandle />
+            <ResizablePanel defaultSize={50} minSize={30}>
+              <div className="h-full flex flex-col p-8 gap-4">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-semibold">Optimized Prompt</h3>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(finalPrompt);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    }}
+                    className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-md border border-border hover:bg-surface-2 transition-colors text-sm"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                    <span>{copied ? "Copied!" : "Copy Prompt"}</span>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto bg-background rounded-xl border border-border p-2">
+                  <pre
+                    className="text-sm font-mono whitespace-pre-wrap p-4"
+                    dangerouslySetInnerHTML={{ __html: syntaxHighlight(finalPrompt) }}
+                  />
+                </div>
+              </div>
+            </ResizablePanel>
+          </>
+        )}
+      </ResizablePanelGroup>
+    </div>
+  );
 };
 
-interface QuickAnswerInputProps {
-    onSubmit: (answer: string) => void;
-    placeholder?: string;
-}
+const QuickAnswerInput: React.FC<{
+  onSubmit: (ans: string, img?: string) => void;
+  placeholder: string;
+}> = ({ onSubmit, placeholder }) => {
+  const [input, setInput] = useState("");
+  const [image, setImage] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-const QuickAnswerInput: React.FC<QuickAnswerInputProps> = ({ onSubmit, placeholder = "Type your answer..." }) => {
-    const [input, setInput] = useState("");
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setImage(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (input.trim()) {
-            onSubmit(input);
-            setInput("");
-        }
-    };
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input.trim() || image) {
+      onSubmit(input, image || undefined);
+      setInput("");
+      setImage(null);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
-    return (
-        <form onSubmit={handleSubmit} className="relative">
-            <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={placeholder}
-                className="w-full px-4 py-3 pr-24 bg-surface-2 border border-white/10 rounded-lg focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all text-white placeholder-muted-foreground text-sm"
-                autoFocus
-            />
-            <button
-                type="submit"
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-white text-black rounded-md hover:bg-gray-200 transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                Send
-            </button>
-        </form>
-    );
+  return (
+    <div className="space-y-3">
+      {image && (
+        <div className="relative inline-block">
+          <img src={image} className="h-20 w-20 object-cover rounded-lg border border-border" />
+          <button
+            onClick={() => setImage(null)}
+            className="absolute -top-2 -right-2 bg-foreground text-background rounded-full p-1"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="relative">
+        <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={placeholder}
+          className="w-full pl-12 pr-24 py-4 bg-surface-1 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all text-foreground placeholder-muted-foreground/50 text-base"
+          autoFocus
+        />
+        <button
+          type="submit"
+          disabled={!input.trim() && !image}
+          className="absolute right-3 top-1/2 -translate-y-1/2 px-4 py-2 bg-foreground text-background rounded-lg hover:opacity-90 transition-all font-medium text-sm disabled:opacity-30"
+        >
+          Send
+        </button>
+      </form>
+    </div>
+  );
 };
 
 export default ChatInterface;

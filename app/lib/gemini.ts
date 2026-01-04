@@ -15,8 +15,11 @@ type HistoryItem = {
 export async function promptEngine(
     userInput: string,
     conversationHistory: HistoryItem[],
-    modelName: string
+    modelName: string,
+    imageData?: string // Base64 string from the frontend
 ) {
+    // Ensure we use a vision-capable model if an image is provided
+    // Note: Gemini 1.5 Flash and Pro both support vision by default.
     const model = genAI.getGenerativeModel({ model: modelName });
 
     // Determine Tier based on modelName
@@ -44,27 +47,24 @@ You are an elite AI Prompt Engineer. Your goal is to craft the most detailed, co
 The final prompt you generate must be "Full Context" - meaning it should leave no ambiguity for the target LLM.
 
 Your Process:
-1.  **Analyze**: Deeply understand the user's request.
-2.  **Clarify**: If the request is vague, simple, or lacks specific details (like tone, audience, format, constraints), you MUST ask a clarification question.
-    *   **CRITICAL**: Do NOT guess user intent. If a detail seems important but is missing, you MUST ask.
-    *   Questions should be **short, direct, and high-impact**.
-    *   Ask only ONE question at a time.
-    *   Do not be afraid to ask up to 3-4 questions if necessary to get the full picture.
-3.  **Generate**: Once you have sufficient information, generate the final JSON.
-4.  **Refine**: If the user provides feedback or asks for changes AFTER you have generated a JSON prompt, you MUST update the prompt accordingly and output the NEW JSON.
+1.  **Analyze**: Deeply understand the user's request. If an image is provided, analyze its contents to extract style, layout, or data points.
+2.  **Clarify**: If the request is vague or lacks details, you MUST ask a clarification question.
+    * **CRITICAL**: Do NOT guess user intent. 
+    * Ask only ONE question at a time.
+3.  **Generate**: Once you have sufficient info, generate the final JSON.
+4.  **Refine**: If the user provides feedback, update the prompt and output NEW JSON.
 
 Final Output Requirements (JSON):
-*   **Role**: Define a specific, expert persona.
-*   **Objective**: A detailed, step-by-step description of the task.
-*   **Context**: Include ALL relevant background info, user preferences, and conversation details.
-*   **Constraints**: strict rules, formatting requirements, and "do nots".
-*   **Style**: Define the exact tone, voice, and writing style (e.g., "Professional but approachable", "Technical and precise").
+* **Role**: Define a specific, expert persona.
+* **Objective**: A detailed, step-by-step description.
+* **Context**: Include background info and conversation details.
+* **Constraints**: Strict rules and "do nots".
+* **Style**: Define exact tone and voice.
 
 Rules:
 -   Output MUST be either a single plain-text question OR a valid JSON object.
--   Do NOT output markdown code blocks for the JSON (just the raw JSON string if possible, but if you do, the parser handles it).
+-   Do NOT output markdown code blocks (\`\`\`json). Output raw text.
 -   **TIER REQUIREMENT**: You are currently in the **${tier.toUpperCase()}** tier. ${tierInstructions}
--   If refining, maintain the same JSON structure but improve the content based on user feedback.
 
 Final prompt JSON format:
 {
@@ -82,7 +82,29 @@ Conversation history:
 ${context}
 `;
 
-    const result = await model.generateContent(systemPrompt);
+    // Prepare content parts for multimodal support
+    const contentParts: any[] = [{ text: systemPrompt }];
+
+    // If an image is provided, add it to the request parts
+    if (imageData) {
+        try {
+            // Extract the base64 data and the mime type
+            const mimeType = imageData.match(/data:(.*?);/)?.[1] || "image/jpeg";
+            const base64Data = imageData.split(",")[1];
+
+            contentParts.push({
+                inlineData: {
+                    data: base64Data,
+                    mimeType: mimeType
+                }
+            });
+        } catch (e) {
+            console.error("Error processing image data in engine:", e);
+        }
+    }
+
+    // Call Gemini with the array of parts (Text + Image if available)
+    const result = await model.generateContent(contentParts);
     const response = await result.response;
     return response.text().trim();
 }
